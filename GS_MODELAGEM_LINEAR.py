@@ -1,27 +1,71 @@
 import time
 import sys
 import os
-import textwrap
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 
 
 def efeito_digitacao(texto, delay=0.1):
     for caractere in texto:
-        sys.stdout.write(caractere)
-        sys.stdout.flush()
+        print(caractere, end="", flush=True)
         time.sleep(delay)
     print()
 
 
 def digitar(texto, delay=0.05):
     for caractere in texto:
-        sys.stdout.write(caractere)
-        sys.stdout.flush()
+        print(caractere, end="", flush=True)
         time.sleep(delay)
     print()
+
+
+def ler_float(mensagem):
+    while True:
+        valor = input(mensagem).strip()
+
+        if valor == "":
+            print("Você precisa digitar um valor. Tente novamente.")
+            continue
+
+        try:
+            return float(valor.replace(",", "."))
+        except ValueError:
+            print("Valor inválido. Digite apenas números.")
+
+
+def ler_opcao_0_1(mensagem):
+    while True:
+        valor = input(mensagem).strip()
+
+        if valor == "":
+            print("Você precisa digitar 0 ou 1. Tente novamente.")
+            continue
+
+        try:
+            valor = int(valor)
+        except ValueError:
+            print("Valor inválido. Digite apenas 0 ou 1.")
+            continue
+
+        if valor in [0, 1]:
+            return valor
+        else:
+            print("Opção inválida. Digite apenas 0 ou 1.")
+
+
+def ler_opcao_menu():
+    while True:
+        valor = input("Escolha uma opção: ").strip()
+
+        if valor == "":
+            print("Você precisa escolher uma opção do menu.")
+            continue
+
+        try:
+            return int(valor)
+        except ValueError:
+            print("Digite apenas números.")
 
 
 historico = []
@@ -33,35 +77,27 @@ modulo_operacao = None
 
 dados = None
 
-tabela_discreta = None
-tabela_continua = None
-analises_estatisticas = {}
-graficos_gerados = []
-
-
-# Base única escolhida:
-# Amateur Satellite Database / SatNOGS
-# Fonte: GitHub
-URL_BASE = "https://raw.githubusercontent.com/palewire/amateur-satellite-database/main/data/satnogs.csv"
+# Arquivo .csv separado, entregue junto com este código
+ARQUIVO_BASE = "base_satelites_github.csv"
 
 
 def inserir_dados():
-    temperatura = float(input("Digite a temperatura da nave: "))
+    temperatura = ler_float("Digite a temperatura da nave: ")
     print()
 
-    energia = float(input("Digite o nível de energia da nave em %: "))
+    energia = ler_float("Digite o nível de energia da nave em %: ")
     print()
 
-    comunicacao = int(input("""
+    comunicacao = ler_opcao_0_1("""
 0 = Afetado
 1 = Operando
-Digite o status de comunicação: """))
+Digite o status de comunicação: """)
     print()
 
-    modulo = int(input("""
+    modulo = ler_opcao_0_1("""
 0 = Módulo com falha
 1 = Módulo operando normalmente
-Digite o status dos módulos de operação: """))
+Digite o status dos módulos de operação: """)
     print()
 
     leitura = [temperatura, energia, comunicacao, modulo]
@@ -187,28 +223,24 @@ def mostrar_historico():
 def carregar_base_dados():
     global dados
 
-    print("CARREGANDO BASE ÚNICA ESCOLHIDA")
+    print("CARREGANDO BASE DE DADOS")
     print("Base: Amateur Satellite Database / SatNOGS")
     print("Fonte: GitHub")
+    print(f"Arquivo utilizado: {ARQUIVO_BASE}")
     print()
 
+    if not os.path.exists(ARQUIVO_BASE):
+        print("Arquivo da base não encontrado.")
+        print("Deixe o arquivo base_satelites_github.csv na mesma pasta deste código.")
+        return
+
     try:
-        dados = pd.read_csv(URL_BASE, engine="python", on_bad_lines="skip")
+        dados = pd.read_csv(ARQUIVO_BASE)
 
-        print("Base carregada diretamente do GitHub.")
-        print()
-
-        colunas_necessarias = ["launched", "status", "norad_cat_id", "countries", "name"]
-
-        for coluna in colunas_necessarias:
-            if coluna not in dados.columns:
-                print(f"Erro: a coluna '{coluna}' não foi encontrada na base.")
-                return
-
-        dados["launched"] = pd.to_datetime(dados["launched"], errors="coerce", utc=True)
+        dados["launched"] = pd.to_datetime(dados["launched"], errors="coerce")
         dados["ano_lancamento"] = dados["launched"].dt.year
 
-        data_atual = pd.Timestamp.now(tz="UTC")
+        data_atual = pd.Timestamp.today()
         dados["dias_em_orbita"] = (data_atual - dados["launched"]).dt.days
 
         dados["norad_cat_id"] = pd.to_numeric(dados["norad_cat_id"], errors="coerce")
@@ -219,28 +251,22 @@ def carregar_base_dados():
         dados["ano_lancamento"] = dados["ano_lancamento"].astype(int)
         dados["dias_em_orbita"] = dados["dias_em_orbita"].astype(int)
 
-        dados.to_csv("base_satelites_github.csv", index=False)
-
-        print("Base preparada com sucesso!")
+        print("Base carregada com sucesso!")
         print(f"Quantidade de linhas: {dados.shape[0]}")
         print(f"Quantidade de colunas: {dados.shape[1]}")
         print()
-        print("Arquivo salvo para entrega como:")
-        print("base_satelites_github.csv")
-        print()
 
-        print("Colunas principais utilizadas:")
+        print("Colunas utilizadas na análise:")
         print("- ano_lancamento: ano em que o satélite foi lançado")
         print("- dias_em_orbita: quantidade aproximada de dias desde o lançamento")
-        print("- status: situação atual do satélite")
+        print("- status: situação do satélite")
         print("- countries: país relacionado ao satélite")
         print("- norad_cat_id: identificador NORAD")
         print()
 
     except Exception as erro:
         print("Erro ao carregar a base de dados.")
-        print("Verifique sua conexão com a internet.")
-        print(f"Detalhes do erro: {erro}")
+        print(f"Detalhes: {erro}")
 
 
 def verificar_base():
@@ -283,8 +309,6 @@ def mostrar_tabela_como_imagem(tabela, titulo):
 
 
 def montar_tabela_frequencia_discreta():
-    global tabela_discreta
-
     if not verificar_base():
         return
 
@@ -296,27 +320,23 @@ def montar_tabela_frequencia_discreta():
     frequencia_relativa = frequencia / frequencia.sum()
     percentual = frequencia_relativa * 100
 
-    tabela_discreta = pd.DataFrame({
+    tabela = pd.DataFrame({
         "Ano de Lançamento": frequencia.index,
         "Frequência Absoluta": frequencia.values,
         "Frequência Relativa": frequencia_relativa.values,
         "Percentual (%)": percentual.values
     })
 
-    print(tabela_discreta.head(20))
-    print()
-    print("Observação: foram exibidas as 20 primeiras linhas da tabela.")
+    print(tabela)
     print()
 
-    mostrar_tabela_como_imagem(tabela_discreta, "Tabela de Frequência - Ano de Lançamento")
+    mostrar_tabela_como_imagem(tabela, "Tabela de Frequência - Ano de Lançamento")
 
-    tabela_discreta.to_csv("tabela_frequencia_discreta_ano_lancamento.csv", index=False)
-    print("Tabela salva como: tabela_frequencia_discreta_ano_lancamento.csv")
+    tabela.to_csv("tabela_frequencia_discreta.csv", index=False)
+    print("Tabela salva como: tabela_frequencia_discreta.csv")
 
 
 def montar_tabela_frequencia_continua():
-    global tabela_continua
-
     if not verificar_base():
         return
 
@@ -328,38 +348,37 @@ def montar_tabela_frequencia_continua():
 
     quantidade_classes = int(np.sqrt(len(valores)))
 
-    if quantidade_classes > 15:
-        quantidade_classes = 15
+    if quantidade_classes < 3:
+        quantidade_classes = 3
 
-    tabela = pd.cut(valores, bins=quantidade_classes).value_counts().sort_index()
+    if quantidade_classes > 8:
+        quantidade_classes = 8
 
-    frequencia_relativa = tabela / tabela.sum()
+    frequencia = pd.cut(valores, bins=quantidade_classes).value_counts().sort_index()
+    frequencia_relativa = frequencia / frequencia.sum()
     percentual = frequencia_relativa * 100
 
-    tabela_continua = pd.DataFrame({
-        "Intervalo de Dias em Órbita": tabela.index.astype(str),
-        "Frequência Absoluta": tabela.values,
+    tabela = pd.DataFrame({
+        "Intervalo de Dias em Órbita": frequencia.index.astype(str),
+        "Frequência Absoluta": frequencia.values,
         "Frequência Relativa": frequencia_relativa.values,
         "Percentual (%)": percentual.values
     })
 
-    print(tabela_continua)
+    print(tabela)
     print()
 
-    mostrar_tabela_como_imagem(tabela_continua, "Tabela de Frequência - Dias em Órbita")
+    mostrar_tabela_como_imagem(tabela, "Tabela de Frequência - Dias em Órbita")
 
-    tabela_continua.to_csv("tabela_frequencia_continua_dias_orbita.csv", index=False)
-    print("Tabela salva como: tabela_frequencia_continua_dias_orbita.csv")
+    tabela.to_csv("tabela_frequencia_continua.csv", index=False)
+    print("Tabela salva como: tabela_frequencia_continua.csv")
 
 
 def gerar_graficos():
-    global graficos_gerados
-
     if not verificar_base():
         return
 
     print("GERAÇÃO DE GRÁFICOS ESTATÍSTICOS")
-    print("Serão gerados dois gráficos usando a base de satélites do GitHub.")
     print()
 
     plt.figure(figsize=(8, 5))
@@ -374,7 +393,7 @@ def gerar_graficos():
     plt.close()
 
     plt.figure(figsize=(8, 5))
-    plt.hist(dados["dias_em_orbita"], bins=20, color="lightgreen", edgecolor="black")
+    plt.hist(dados["dias_em_orbita"], bins=8, color="lightgreen", edgecolor="black")
     plt.title("Distribuição dos Dias em Órbita")
     plt.xlabel("Dias em órbita")
     plt.ylabel("Frequência")
@@ -383,11 +402,6 @@ def gerar_graficos():
     plt.savefig("grafico_2_dias_em_orbita.png")
     plt.show()
     plt.close()
-
-    graficos_gerados = [
-        "grafico_1_status_satelites.png",
-        "grafico_2_dias_em_orbita.png"
-    ]
 
     print("Gráficos gerados e exibidos com sucesso!")
     print("- grafico_1_status_satelites.png")
@@ -439,8 +453,6 @@ def calcular_medidas(coluna):
 
 
 def realizar_analise_univariada():
-    global analises_estatisticas
-
     if not verificar_base():
         return
 
@@ -448,12 +460,14 @@ def realizar_analise_univariada():
     print("Variáveis analisadas: ano_lancamento e dias_em_orbita")
     print()
 
-    analises_estatisticas["ano_lancamento"] = calcular_medidas("ano_lancamento")
-    analises_estatisticas["dias_em_orbita"] = calcular_medidas("dias_em_orbita")
+    analises = {
+        "ano_lancamento": calcular_medidas("ano_lancamento"),
+        "dias_em_orbita": calcular_medidas("dias_em_orbita")
+    }
 
     resultado = []
 
-    for variavel, medidas in analises_estatisticas.items():
+    for variavel, medidas in analises.items():
         linha = {"Variável": variavel}
         linha.update(medidas)
         resultado.append(linha)
@@ -465,324 +479,8 @@ def realizar_analise_univariada():
 
     mostrar_tabela_como_imagem(tabela_resultado, "Análise Univariada - Estatística Descritiva")
 
-    tabela_resultado.to_csv("analise_univariada_satelites.csv", index=False)
-    print("Análise salva como: analise_univariada_satelites.csv")
-
-
-def interpretar_variavel(nome_variavel, medidas):
-    texto = ""
-
-    if nome_variavel == "ano_lancamento":
-        nome = "ano de lançamento dos satélites"
-    elif nome_variavel == "dias_em_orbita":
-        nome = "quantidade de dias em órbita"
-    else:
-        nome = nome_variavel
-
-    texto += f"A variável {nome} apresentou média de {medidas['Média']:.2f}, "
-    texto += f"mediana de {medidas['Mediana']:.2f} e moda de {medidas['Moda']}. "
-
-    texto += f"Os valores variaram entre {medidas['Mínimo']:.2f} e {medidas['Máximo']:.2f}, "
-    texto += f"com amplitude de {medidas['Amplitude']:.2f}. "
-
-    texto += f"A variância foi de {medidas['Variância']:.2f} e o desvio padrão foi de {medidas['Desvio Padrão']:.2f}. "
-
-    if medidas["Coeficiente de Variação (%)"] < 15:
-        texto += "O coeficiente de variação indica baixa dispersão dos dados. "
-    elif medidas["Coeficiente de Variação (%)"] < 30:
-        texto += "O coeficiente de variação indica dispersão moderada dos dados. "
-    else:
-        texto += "O coeficiente de variação indica alta dispersão dos dados. "
-
-    texto += f"Os quartis foram Q1 = {medidas['1º Quartil']:.2f}, "
-    texto += f"Q2 = {medidas['2º Quartil']:.2f} e Q3 = {medidas['3º Quartil']:.2f}. "
-
-    return texto
-
-
-def quebrar_texto(texto, largura=95):
-    linhas = []
-
-    for paragrafo in texto.split("\n"):
-        if paragrafo.strip() == "":
-            linhas.append("")
-        else:
-            linhas.extend(textwrap.wrap(paragrafo, width=largura))
-
-    return "\n".join(linhas)
-
-
-def adicionar_texto_pdf(pdf, titulo, texto):
-    plt.figure(figsize=(8.27, 11.69))
-    plt.axis("off")
-
-    texto_formatado = quebrar_texto(texto, largura=90)
-
-    plt.text(
-        0.5,
-        0.92,
-        titulo,
-        fontsize=18,
-        ha="center",
-        va="top",
-        weight="bold"
-    )
-
-    plt.plot([0.15, 0.85], [0.89, 0.89], linewidth=1)
-
-    plt.text(
-        0.5,
-        0.83,
-        texto_formatado,
-        fontsize=11,
-        ha="center",
-        va="top",
-        linespacing=1.6
-    )
-
-    pdf.savefig(bbox_inches="tight")
-    plt.close()
-
-
-def preparar_tabela_para_pdf(tabela):
-    tabela_formatada = tabela.copy()
-
-    for coluna in tabela_formatada.columns:
-        tabela_formatada[coluna] = tabela_formatada[coluna].apply(
-            lambda valor: f"{valor:.2f}" if isinstance(valor, (int, float, np.integer, np.floating)) else str(valor)
-        )
-
-    return tabela_formatada
-
-
-def adicionar_tabela_pdf(pdf, titulo, tabela):
-    plt.figure(figsize=(11.69, 8.27))
-    plt.axis("off")
-
-    tabela_exibida = tabela.copy()
-
-    if len(tabela_exibida) > 12:
-        tabela_exibida = tabela_exibida.head(12)
-
-    tabela_exibida = preparar_tabela_para_pdf(tabela_exibida)
-
-    plt.text(
-        0.5,
-        0.93,
-        titulo,
-        fontsize=17,
-        ha="center",
-        va="center",
-        weight="bold"
-    )
-
-    plt.plot([0.12, 0.88], [0.89, 0.89], linewidth=1)
-
-    tabela_plot = plt.table(
-        cellText=tabela_exibida.values,
-        colLabels=tabela_exibida.columns,
-        loc="center",
-        cellLoc="center",
-        colLoc="center"
-    )
-
-    tabela_plot.auto_set_font_size(False)
-    tabela_plot.set_fontsize(8)
-    tabela_plot.scale(1.1, 1.6)
-
-    for (linha, coluna), celula in tabela_plot.get_celld().items():
-        celula.set_edgecolor("black")
-
-        if linha == 0:
-            celula.set_text_props(weight="bold")
-            celula.set_height(0.08)
-        else:
-            celula.set_height(0.06)
-
-    pdf.savefig(bbox_inches="tight")
-    plt.close()
-
-
-def adicionar_imagem_pdf(pdf, titulo, caminho_imagem):
-    if not os.path.exists(caminho_imagem):
-        return
-
-    imagem = plt.imread(caminho_imagem)
-
-    plt.figure(figsize=(11.69, 8.27))
-    plt.axis("off")
-
-    plt.text(
-        0.5,
-        0.95,
-        titulo,
-        fontsize=17,
-        ha="center",
-        va="center",
-        weight="bold"
-    )
-
-    plt.plot([0.12, 0.88], [0.91, 0.91], linewidth=1)
-
-    plt.imshow(imagem, extent=[0.08, 0.92, 0.08, 0.86], aspect="auto")
-
-    pdf.savefig(bbox_inches="tight")
-    plt.close()
-
-
-def gerar_relatorio_pdf():
-    if not verificar_base():
-        return
-
-    if tabela_discreta is None:
-        print("A tabela de frequência discreta ainda não foi gerada.")
-        print("Use a opção 6 antes de gerar o relatório.")
-        return
-
-    if tabela_continua is None:
-        print("A tabela de frequência contínua ainda não foi gerada.")
-        print("Use a opção 7 antes de gerar o relatório.")
-        return
-
-    if len(graficos_gerados) == 0:
-        print("Os gráficos ainda não foram gerados.")
-        print("Use a opção 8 antes de gerar o relatório.")
-        return
-
-    if len(analises_estatisticas) == 0:
-        print("A análise univariada ainda não foi realizada.")
-        print("Use a opção 9 antes de gerar o relatório.")
-        return
-
-    nome_pdf = "relatorio_estatistico_global_solution.pdf"
-
-    with PdfPages(nome_pdf) as pdf:
-        plt.figure(figsize=(8.27, 11.69))
-        plt.axis("off")
-
-        plt.text(
-            0.5,
-            0.78,
-            "GLOBAL SOLUTION",
-            fontsize=26,
-            ha="center",
-            va="center",
-            weight="bold"
-        )
-
-        plt.text(
-            0.5,
-            0.72,
-            "1º SEMESTRE",
-            fontsize=18,
-            ha="center",
-            va="center"
-        )
-
-        plt.plot([0.2, 0.8], [0.68, 0.68], linewidth=1.5)
-
-        plt.text(
-            0.5,
-            0.58,
-            "Sistema Inteligente de Monitoramento\npara Missão Espacial Experimental",
-            fontsize=16,
-            ha="center",
-            va="center",
-            linespacing=1.5
-        )
-
-        plt.text(
-            0.5,
-            0.43,
-            "Base de dados utilizada:\nAmateur Satellite Database / SatNOGS",
-            fontsize=13,
-            ha="center",
-            va="center",
-            linespacing=1.5
-        )
-
-        plt.text(
-            0.5,
-            0.32,
-            "Relatório Estatístico",
-            fontsize=15,
-            ha="center",
-            va="center",
-            weight="bold"
-        )
-
-        plt.text(
-            0.5,
-            0.18,
-            "Fonte: GitHub",
-            fontsize=11,
-            ha="center",
-            va="center"
-        )
-
-        pdf.savefig(bbox_inches="tight")
-        plt.close()
-
-        texto_introducao = (
-            "Este relatório apresenta uma análise estatística baseada na base Amateur Satellite Database / SatNOGS, "
-            "disponibilizada em formato CSV por meio do GitHub. A base contém informações reais sobre satélites, "
-            "incluindo nome, status, país, identificador NORAD e data de lançamento.\n\n"
-            "A escolha dessa base se relaciona diretamente ao tema da Global Solution, pois utiliza dados reais ligados "
-            "ao contexto espacial. A análise permite transformar dados brutos em informações úteis para sistemas "
-            "inteligentes de monitoramento, tomada de decisão e identificação de padrões operacionais."
-        )
-
-        adicionar_texto_pdf(pdf, "Introdução", texto_introducao)
-
-        texto_objetivo = (
-            "O objetivo deste relatório é organizar, visualizar e interpretar dados relacionados a satélites por meio "
-            "de tabelas de distribuição de frequências, gráficos estatísticos e medidas de estatística descritiva.\n\n"
-            "Com isso, busca-se demonstrar como a análise de dados pode apoiar decisões em uma missão espacial experimental, "
-            "contribuindo para a identificação de variações, padrões e possíveis pontos de atenção."
-        )
-
-        adicionar_texto_pdf(pdf, "Objetivo da Análise", texto_objetivo)
-
-        adicionar_tabela_pdf(pdf, "Tabela de Frequência - Ano de Lançamento", tabela_discreta)
-        adicionar_tabela_pdf(pdf, "Tabela de Frequência - Dias em Órbita", tabela_continua)
-
-        adicionar_imagem_pdf(pdf, "Gráfico 1 - Status dos Satélites", "grafico_1_status_satelites.png")
-        adicionar_imagem_pdf(pdf, "Gráfico 2 - Distribuição dos Dias em Órbita", "grafico_2_dias_em_orbita.png")
-
-        tabela_analise = pd.DataFrame(analises_estatisticas).T.reset_index()
-        tabela_analise = tabela_analise.rename(columns={"index": "Variável"})
-
-        adicionar_tabela_pdf(pdf, "Análise Univariada", tabela_analise)
-
-        texto_interpretacao = ""
-
-        for variavel, medidas in analises_estatisticas.items():
-            texto_interpretacao += interpretar_variavel(variavel, medidas)
-            texto_interpretacao += "\n\n"
-
-        texto_interpretacao += (
-            "A análise do ano de lançamento permite observar a distribuição temporal dos satélites registrados, "
-            "possibilitando identificar períodos com maior concentração de lançamentos. Já a variável dias em órbita "
-            "ajuda a compreender há quanto tempo os satélites permanecem registrados desde seu lançamento.\n\n"
-            "No contexto de uma missão espacial experimental, esses resultados auxiliam na organização das informações, "
-            "na leitura de padrões, na avaliação de status operacionais e no apoio à tomada de decisão técnica."
-        )
-
-        adicionar_texto_pdf(pdf, "Interpretação dos Resultados", texto_interpretacao)
-
-        texto_conclusao = (
-            "A utilização da base Amateur Satellite Database / SatNOGS permitiu aplicar conceitos de estatística descritiva, "
-            "distribuição de frequências e visualização gráfica em um contexto real da área espacial.\n\n"
-            "Os resultados demonstram que a análise de dados pode transformar informações brutas em inteligência acionável. "
-            "Dessa forma, o sistema desenvolvido contribui para o objetivo da Global Solution ao simular uma plataforma "
-            "de monitoramento e análise voltada à tomada de decisão em missões espaciais experimentais."
-        )
-
-        adicionar_texto_pdf(pdf, "Conclusão", texto_conclusao)
-
-    print()
-    print(f"Relatório PDF gerado com sucesso: {nome_pdf}")
-    print()
+    tabela_resultado.to_csv("analise_univariada.csv", index=False)
+    print("Análise salva como: analise_univariada.csv")
 
 
 while True:
@@ -793,20 +491,15 @@ while True:
 2 - Visualizar status atual
 3 - Executar análise automática da missão
 4 - Histórico das leituras
-5 - Carregar base única de satélites do GitHub
+5 - Carregar base de dados CSV
 6 - Gerar tabela de frequência discreta
 7 - Gerar tabela de frequência contínua
 8 - Gerar gráficos estatísticos
 9 - Realizar análise univariada
-10 - Gerar relatório estatístico em PDF
-11 - Encerrar sistema""")
+10 - Encerrar sistema""")
     print()
 
-    try:
-        opcao = int(input("Escolha uma opção: "))
-    except ValueError:
-        print("Digite apenas números.")
-        continue
+    opcao = ler_opcao_menu()
 
     print()
 
@@ -838,9 +531,6 @@ while True:
         realizar_analise_univariada()
 
     elif opcao == 10:
-        gerar_relatorio_pdf()
-
-    elif opcao == 11:
         print("Sistema encerrado.")
         break
 
